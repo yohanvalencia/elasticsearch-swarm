@@ -1,0 +1,156 @@
+version: '3.8'
+services:
+  es-master:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ES_VERSION}
+    environment:
+      - node.name=es-master-{{.Node.Hostname}}
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=es-master
+      - cluster.initial_master_nodes=${ES_MASTER_NODES}
+      - ES_JAVA_OPTS=-Xms${ES_MASTER_HEAP_MEMORY} -Xmx${ES_MASTER_HEAP_MEMORY}
+      - node.master=true
+      - node.voting_only=false
+      - node.data=false
+      - node.ingest=false
+      - node.ml=false
+      - xpack.ml.enabled=true
+      - node.transform=false
+      - node.remote_cluster_client=false
+      - /etc/localtime:/etc/localtime
+      - /etc/timezone:/etc/timezone
+    volumes:
+      - es-master:/usr/share/elasticsearch/data
+    networks:
+      - elastic
+    deploy:
+      placement:
+        constraints:
+          - node.role==manager
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  es-data:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ES_VERSION}
+    environment:
+      - node.name=es-data-{{.Node.Hostname}}
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=es-master
+      - cluster.initial_master_nodes=${ES_MASTER_NODES}
+      - ES_JAVA_OPTS=-Xms${ES_DATA_HEAP_MEMORY} -Xmx${ES_DATA_HEAP_MEMORY}
+      - node.master=false
+      - node.voting_only=false
+      - node.data=true
+      - node.ingest=false
+      - node.ml=false
+      - node.transform=false
+      - node.remote_cluster_client=false
+      - /etc/localtime:/etc/localtime
+      - /etc/timezone:/etc/timezone
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks:
+      - elastic
+    deploy:
+      mode: global
+      endpoint_mode: dnsrr
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  es-coordination:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ES_VERSION}
+    environment:
+      - node.name=es-coordination-{{.Node.Hostname}}
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=es-master
+      - cluster.initial_master_nodes=${ES_MASTER_NODES}
+      - ES_JAVA_OPTS=-Xms${ES_COORDINATION_HEAP_MEMORY} -Xmx${ES_COORDINATION_HEAP_MEMORY}
+      - node.master=false
+      - node.voting_only=false
+      - node.data=false
+      - node.ingest=true
+      - node.ml=false
+      - xpack.ml.enabled=true
+      - node.transform=false
+      - node.remote_cluster_client=false
+      - /etc/localtime:/etc/localtime
+      - /etc/timezone:/etc/timezone
+    networks:
+      - elastic
+    deploy:
+      mode: global
+      endpoint_mode: dnsrr
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 0.5G
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${KIBANA_VERSION}
+    environment:
+      - SERVER_NAME=kibana
+      - ELASTICSEARCH_HOSTS=http://es-coordination:9200
+      - /etc/localtime:/etc/localtime
+      - /etc/timezone:/etc/timezone
+    depends_on:
+      - es-master
+      - es-data
+      - es-coordination
+    networks:
+      - elastic
+    deploy:
+      placement:
+        constraints:
+          - node.role==manager
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1'
+        reservations:
+          cpus: '0.5'
+          memory: 2G
+
+  revproxy:
+    image: nginx:${NGINX_VERSION}
+    ports:
+      - 80:80
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - es-coordination
+      - kibana
+    networks:
+      - elastic
+    deploy:
+      placement:
+        constraints:
+          - node.role==manager
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+
+networks:
+  elastic:
+volumes:
+  es-master:
+    driver: local
+  es-data:
+    driver: local
+

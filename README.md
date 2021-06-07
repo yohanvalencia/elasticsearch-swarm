@@ -14,7 +14,7 @@ This stack has the following services:
 This stack must be deploy as follows:
 
 ```sh
-$ env $(cat .env | xargs) docker stack deploy -c elk-stack-production.yaml elk
+$ env $(cat .env | xargs) docker stack deploy -c mult-node.yaml elk
 ```
 
 In your .env file you should have:
